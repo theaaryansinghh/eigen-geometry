@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eigen Geometry</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #fff; font-family: -apple-system, 'Segoe UI', sans-serif; }
+  canvas { display: block; position: absolute; inset: 0; cursor: crosshair; }
+
+  #ui {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 228px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+  }
+  #ui::-webkit-scrollbar { display: none; }
+  #ui > * { pointer-events: all; }
+
+  .panel {
+    background: #fff;
+    border: 0.5px solid #d4d3cb;
+    border-radius: 10px;
+    padding: 11px 13px;
+    flex-shrink: 0;
+  }
+  .panel-label {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #999;
+    margin-bottom: 8px;
+  }
+
+  #eq-panel { padding: 0; overflow: hidden; }
+  #eq-panel .panel-label { padding: 11px 13px 0; margin-bottom: 0; }
+
+  .eq-row {
+    display: flex;
+    align-items: center;
+    padding: 7px 10px 7px 13px;
+    border-top: 0.5px solid #f0efe8;
+    gap: 7px;
+    margin-top: 0;
+  }
+  .eq-row:first-child { margin-top: 7px; }
+
+  .eq-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .eq-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    font-family: 'Georgia', serif;
+    color: #1a1a1a;
+    background: transparent;
+    caret-color: #555;
+    padding: 0;
+  }
+  .eq-input::placeholder { color: #ccc; }
+  .eq-input.invalid { color: #cc5555; }
+
+  .eq-remove {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: #d0cfc8;
+    font-size: 15px;
+    line-height: 1;
+    padding: 1px 2px 0;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+  .eq-row:hover .eq-remove { opacity: 1; }
+  .eq-remove:hover { color: #999; }
+
+  #eq-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 10px 8px 13px;
+    margin-top: 2px;
+  }
+  #eq-hint { font-size: 10px; color: #c8c7bf; line-height: 1.5; }
+  #eq-add-btn {
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: #c0bfb8;
+    font-size: 20px;
+    line-height: 1;
+    padding: 0 2px;
+    transition: color 0.15s;
+    flex-shrink: 0;
+  }
+  #eq-add-btn:hover { color: #444; }
+
+  .mat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+  }
+  .mat-cell {
+    font-size: 13px;
+    font-family: 'Georgia', serif;
+    color: #1a1a1a;
+    background: #fafaf8;
+    border: 0.5px solid #e5e4dc;
+    border-radius: 4px;
+    padding: 4px 6px;
+    text-align: center;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .mat-cell:hover { background: #f4f3ee; border-color: #ccc; }
+  .mat-cell:focus { background: #fff; border-color: #aaa; box-shadow: 0 0 0 2px rgba(0,0,0,0.04); }
+
+  .eigen-pair { margin-bottom: 9px; }
+  .eigen-pair:last-child { margin-bottom: 0; }
+  .eigen-key { font-size: 10px; color: #bbb; margin-bottom: 2px; font-family: 'Georgia', serif; }
+  .eigen-v { font-size: 13px; font-family: 'Georgia', serif; color: #222; min-height: 18px; }
+
+  #reset-btn {
+    width: 100%;
+    padding: 7px;
+    border: 0.5px solid #d4d3cb;
+    border-radius: 7px;
+    background: transparent;
+    font-size: 12px;
+    color: #777;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+  #reset-btn:hover { background: #f5f5f2; }
+  #reset-btn:active { background: #eeede8; }
+
+  #hint-bar {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: #bbb;
+    pointer-events: none;
+    white-space: nowrap;
+    transition: opacity 0.5s;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="ui">
+  <div class="panel" id="eq-panel">
+    <div class="panel-label">equations &amp; points</div>
+    <div id="eq-list"></div>
+    <div id="eq-footer">
+      <div id="eq-hint">y=2x · sin(x) · x^2 · (2,3)</div>
+      <button id="eq-add-btn" title="add row">+</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-label">transform matrix</div>
+    <div class="mat-grid">
+      <input class="mat-cell" id="m00" value="1" autocomplete="off" spellcheck="false" />
+      <input class="mat-cell" id="m01" value="0" autocomplete="off" spellcheck="false" />
+      <input class="mat-cell" id="m10" value="0" autocomplete="off" spellcheck="false" />
+      <input class="mat-cell" id="m11" value="1" autocomplete="off" spellcheck="false" />
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-label">eigenvalues &amp; eigenvectors</div>
+    <div class="eigen-pair">
+      <div class="eigen-key">λ₁</div>
+      <div class="eigen-v" id="ev1">—</div>
+    </div>
+    <div class="eigen-pair">
+      <div class="eigen-key">v₁</div>
+      <div class="eigen-v" id="evec1">—</div>
+    </div>
+    <div class="eigen-pair">
+      <div class="eigen-key">λ₂</div>
+      <div class="eigen-v" id="ev2">—</div>
+    </div>
+    <div class="eigen-pair">
+      <div class="eigen-key">v₂</div>
+      <div class="eigen-v" id="evec2">—</div>
+    </div>
+  </div>
+
+  <button id="reset-btn">reset transform</button>
+</div>
+
+<div id="hint-bar">drag to warp space · scroll to zoom</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+let scale = 60;
+let offsetX = 0, offsetY = 0;
+let mat = [[1,0],[0,1]];
+
+// ── Palette ───────────────────────────────────────────────────────────
+const PALETTE = [
+  '#1a1a1a',
+  '#c0392b',
+  '#2471a3',
+  '#27ae60',
+  '#8e44ad',
+  '#d35400',
+  '#16a085',
+  '#7f8c8d',
+];
+
+let entries = [];
+let nextId = 0;
+
+function addEntry(initVal) {
+  const id = nextId++;
+  const idx = entries.length;
+  entries.push({ id, raw: initVal || '', type: 'empty', fn: null, px: 0, py: 0, color: PALETTE[idx % PALETTE.length] });
+  renderList();
+  const inp = document.getElementById('ei-' + id);
+  if (inp && !initVal) inp.focus();
+  if (initVal) { parseEntry(id, initVal); draw(); }
+}
+
+function removeEntry(id) {
+  entries = entries.filter(e => e.id !== id);
+  entries.forEach((e, i) => { e.color = PALETTE[i % PALETTE.length]; });
+  renderList();
+  draw();
+}
+
+function renderList() {
+  const list = document.getElementById('eq-list');
+  list.innerHTML = '';
+  const multi = entries.length > 1;
+  entries.forEach((entry, idx) => {
+    const row = document.createElement('div');
+    row.className = 'eq-row';
+
+    const dot = document.createElement('div');
+    dot.className = 'eq-dot';
+    dot.style.background = entry.color;
+
+    const inp = document.createElement('input');
+    inp.className = 'eq-input' + (entry.type === 'error' ? ' invalid' : '');
+    inp.id = 'ei-' + entry.id;
+    inp.value = entry.raw;
+    inp.autocomplete = 'off';
+    inp.spellcheck = false;
+    inp.placeholder = idx === 0 ? 'y = 2x, (2,3), …' : '…';
+    inp.addEventListener('input', () => {
+      entry.raw = inp.value;
+      parseEntry(entry.id, inp.value);
+      inp.className = 'eq-input' + (entry.type === 'error' ? ' invalid' : '');
+      draw();
+    });
+
+    const rm = document.createElement('button');
+    rm.className = 'eq-remove';
+    rm.textContent = '×';
+    rm.title = 'remove';
+    if (!multi) rm.style.visibility = 'hidden';
+    rm.addEventListener('click', () => removeEntry(entry.id));
+
+    row.appendChild(dot);
+    row.appendChild(inp);
+    row.appendChild(rm);
+    list.appendChild(row);
+  });
+}
+
+const POINT_RE = /^\s*\(\s*([+-]?\d*\.?\d+)\s*,\s*([+-]?\d*\.?\d+)\s*\)\s*$/;
+
+function parseEntry(id, raw) {
+  const e = entries.find(e => e.id === id);
+  if (!e) return;
+  raw = raw.trim();
+  if (!raw) { e.type = 'empty'; e.fn = null; return; }
+  const pm = raw.match(POINT_RE);
+  if (pm) { e.type = 'point'; e.px = parseFloat(pm[1]); e.py = parseFloat(pm[2]); e.fn = null; return; }
+  const fn = parseEquation(raw);
+  if (fn) { e.type = 'eq'; e.fn = fn; }
+  else { e.type = 'error'; e.fn = null; }
+}
+
+function parseEquation(s) {
+  s = s.trim();
+  if (!s) return null;
+  s = s.replace(/^y\s*=\s*/i,'').replace(/^f\s*\(\s*x\s*\)\s*=\s*/i,'');
+  s = s.replace(/\bsin\b/g,'Math.sin').replace(/\bcos\b/g,'Math.cos')
+       .replace(/\btan\b/g,'Math.tan').replace(/\bln\b/g,'Math.log')
+       .replace(/\blog\b/g,'Math.log10').replace(/\bsqrt\b/g,'Math.sqrt')
+       .replace(/\babs\b/g,'Math.abs').replace(/\bpi\b/gi,'Math.PI')
+       .replace(/\be\b/g,'Math.E').replace(/\^/g,'**');
+  s = s.replace(/(\d)(x)/g,'$1*$2').replace(/\)(x)/g,')*$2');
+  try { const fn = new Function('x',`"use strict";return(${s});`); fn(1); return fn; }
+  catch(e) { return null; }
+}
+
+function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; draw(); }
+window.addEventListener('resize', resize);
+
+function worldToCanvas(wx, wy) {
+  return [W/2+offsetX+(mat[0][0]*wx+mat[0][1]*wy)*scale, H/2+offsetY-(mat[1][0]*wx+mat[1][1]*wy)*scale];
+}
+function canvasToWorld(cx, cy) {
+  const rx=(cx-W/2-offsetX)/scale, ry=-(cy-H/2-offsetY)/scale;
+  const det=mat[0][0]*mat[1][1]-mat[0][1]*mat[1][0];
+  if (Math.abs(det)<1e-10) return [rx,ry];
+  const inv=[[mat[1][1]/det,-mat[0][1]/det],[-mat[1][0]/det,mat[0][0]/det]];
+  return [inv[0][0]*rx+inv[0][1]*ry, inv[1][0]*rx+inv[1][1]*ry];
+}
+
+function computeEigen(m) {
+  const a=m[0][0],b=m[0][1],c=m[1][0],d=m[1][1];
+  const tr=a+d,det=a*d-b*c,disc=tr*tr-4*det;
+  if (disc<-1e-9) {
+    const re=tr/2,im=Math.sqrt(-disc)/2;
+    return {complex:true,l1:`${fmt(re)} + ${fmt(im)}i`,l2:`${fmt(re)} − ${fmt(im)}i`,v1:'complex',v2:'complex'};
+  }
+  const sqD=Math.sqrt(Math.max(0,disc)),l1=(tr+sqD)/2,l2=(tr-sqD)/2;
+  function eigVec(lam) {
+    const ax=a-lam,bx=b,cx2=c,dx2=d-lam;
+    let vx,vy;
+    if (Math.abs(bx)>1e-10){vx=-bx;vy=ax;}
+    else if(Math.abs(cx2)>1e-10){vx=dx2;vy=-cx2;}
+    else{vx=1;vy=0;}
+    const len=Math.sqrt(vx*vx+vy*vy);
+    return len<1e-12?[1,0]:[vx/len,vy/len];
+  }
+  return {complex:false,l1,l2,v1:eigVec(l1),v2:eigVec(l2)};
+}
+function fmt(n){return(isNaN(n)||!isFinite(n))?'—':n.toFixed(3).replace(/\.?0+$/,'')||'0';}
+function fmtVec(v){return Array.isArray(v)?`(${fmt(v[0])}, ${fmt(v[1])})`:v;}
+
+const MAT_IDS = [['m00','m01'],['m10','m11']];
+function updateEigenUI() {
+  // Only update matrix inputs that aren't currently being edited
+  MAT_IDS.forEach((row,r) => row.forEach((id,c) => {
+    const el = document.getElementById(id);
+    if (document.activeElement !== el) el.value = fmt(mat[r][c]);
+  }));
+  const e=computeEigen(mat);
+  document.getElementById('ev1').textContent=e.complex?e.l1:fmt(e.l1);
+  document.getElementById('ev2').textContent=e.complex?e.l2:fmt(e.l2);
+  document.getElementById('evec1').textContent=e.complex?'complex':fmtVec(e.v1);
+  document.getElementById('evec2').textContent=e.complex?'complex':fmtVec(e.v2);
+}
+
+function readMatrixInputs() {
+  const v = id => { const n=parseFloat(document.getElementById(id).value); return isNaN(n)?0:n; };
+  mat = [[v('m00'),v('m01')],[v('m10'),v('m11')]];
+}
+
+function wireMatrixInputs() {
+  MAT_IDS.forEach((row,r) => row.forEach((id,c) => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => { readMatrixInputs(); updateEigenUI(); draw(); });
+    el.addEventListener('focus', () => el.select());
+    el.addEventListener('keydown', e => {
+      if (e.key==='ArrowUp'||e.key==='ArrowDown') {
+        e.preventDefault();
+        const delta = e.shiftKey ? 0.1 : 1;
+        const cur = parseFloat(el.value)||0;
+        el.value = parseFloat((cur + (e.key==='ArrowUp'?delta:-delta)).toFixed(6));
+        readMatrixInputs(); updateEigenUI(); draw();
+      }
+      if (e.key==='Enter') el.blur();
+    });
+  }));
+}
+
+function draw() {
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+  drawGrid(); drawAxes(); drawEigenVectors(); drawAllEntries();
+}
+
+function drawGrid() {
+  const R=30;
+  for (let i=-R;i<=R;i++) {
+    const maj=i%5===0;
+    ctx.strokeStyle=maj?'#ddd':'#f0f0ee'; ctx.lineWidth=maj?0.7:0.4;
+    const [x1,y1]=worldToCanvas(i,-R),[x2,y2]=worldToCanvas(i,R);
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    const [x3,y3]=worldToCanvas(-R,i),[x4,y4]=worldToCanvas(R,i);
+    ctx.beginPath();ctx.moveTo(x3,y3);ctx.lineTo(x4,y4);ctx.stroke();
+  }
+}
+
+function drawAxes() {
+  const R=40;
+  ctx.strokeStyle='#000'; ctx.lineWidth=1.2;
+  const [ax1,ay1]=worldToCanvas(-R,0),[ax2,ay2]=worldToCanvas(R,0);
+  const [bx1,by1]=worldToCanvas(0,-R),[bx2,by2]=worldToCanvas(0,R);
+  ctx.beginPath();ctx.moveTo(ax1,ay1);ctx.lineTo(ax2,ay2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(bx1,by1);ctx.lineTo(bx2,by2);ctx.stroke();
+  ctx.fillStyle='#888'; ctx.font='10px -apple-system,sans-serif';
+  const step=scale>=40?1:scale>=20?2:5;
+  for (let i=-20;i<=20;i++) {
+    if (i===0||i%step!==0) continue;
+    const [tx,ty]=worldToCanvas(i,0);
+    if(tx>10&&tx<W-10){ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(i,tx,ty+3);}
+    const [lx,ly]=worldToCanvas(0,i);
+    if(ly>10&&ly<H-10){ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText(i,lx-4,ly);}
+  }
+  ctx.fillStyle='#555'; ctx.font='12px -apple-system,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText('x',ax2-12,ay2-14);
+  ctx.textAlign='center'; ctx.fillText('y',bx2+12,by2+10);
+}
+
+function drawEigenVectors() {
+  const e=computeEigen(mat); if(e.complex) return;
+  const len=3.5;
+  function dv(vec,col){
+    if(!Array.isArray(vec)) return;
+    const [vx,vy]=vec;
+    const [ex,ey]=worldToCanvas(vx*len,vy*len),[nx,ny]=worldToCanvas(-vx*len,-vy*len);
+    const [ox,oy]=worldToCanvas(0,0);
+    ctx.strokeStyle=col;ctx.lineWidth=1;ctx.setLineDash([5,4]);
+    ctx.beginPath();ctx.moveTo(nx,ny);ctx.lineTo(ex,ey);ctx.stroke();
+    ctx.setLineDash([]);
+    const ang=Math.atan2(ey-oy,ex-ox),as=8;
+    ctx.fillStyle=col;
+    ctx.beginPath();ctx.moveTo(ex,ey);
+    ctx.lineTo(ex-as*Math.cos(ang-0.4),ey-as*Math.sin(ang-0.4));
+    ctx.lineTo(ex-as*Math.cos(ang+0.4),ey-as*Math.sin(ang+0.4));
+    ctx.closePath();ctx.fill();
+  }
+  dv(e.v1,'rgba(180,100,100,0.6)');
+  dv(e.v2,'rgba(80,130,200,0.6)');
+}
+
+function drawAllEntries() {
+  entries.forEach(entry => {
+    if (entry.type==='eq'&&entry.fn) drawCurve(entry.fn, entry.color);
+    else if (entry.type==='point') drawPoint(entry.px, entry.py, entry.color);
+  });
+}
+
+function drawCurve(fn, color) {
+  const xMin=canvasToWorld(0,H/2)[0], xMax=canvasToWorld(W,H/2)[0];
+  const span=(xMax-xMin)*1.5, cx0=(xMax+xMin)/2, N=1200;
+  ctx.strokeStyle=color; ctx.lineWidth=1.4; ctx.setLineDash([]);
+  ctx.beginPath();
+  let penDown=false, lastPy=0;
+  for (let i=0;i<=N;i++) {
+    const ux=cx0-span/2+(span*i/N);
+    let uy; try{uy=fn(ux);}catch(e){penDown=false;continue;}
+    if(!isFinite(uy)||isNaN(uy)||Math.abs(uy)>1e6){penDown=false;continue;}
+    const [px2,py2]=worldToCanvas(ux,uy);
+    if(penDown&&Math.abs(py2-lastPy)>H*2) penDown=false;
+    if(!penDown){ctx.moveTo(px2,py2);penDown=true;}else ctx.lineTo(px2,py2);
+    lastPy=py2;
+  }
+  ctx.stroke();
+}
+
+function drawPoint(wx, wy, color) {
+  const [px,py]=worldToCanvas(wx,wy);
+  ctx.beginPath();ctx.arc(px,py,5.5,0,Math.PI*2);
+  ctx.fillStyle='#fff';ctx.fill();
+  ctx.beginPath();ctx.arc(px,py,4,0,Math.PI*2);
+  ctx.fillStyle=color;ctx.fill();
+  ctx.fillStyle=color;
+  ctx.font='11px -apple-system,sans-serif';
+  ctx.textAlign='left';ctx.textBaseline='bottom';
+  ctx.fillText(`(${wx}, ${wy})`,px+8,py-3);
+}
+
+// drag and stretch
+let dragging=false, dragWorldPoint=null, matAtDragStart=null;
+
+canvas.addEventListener('mousedown',e=>{
+  if(e.target!==canvas||e.button!==0) return;
+  dragging=true;
+  dragWorldPoint=canvasToWorld(e.clientX,e.clientY);
+  matAtDragStart=mat.map(r=>[...r]);
+  canvas.style.cursor='grabbing';
+});
+window.addEventListener('mousemove',e=>{
+  if(!dragging) return;
+  const mx=e.clientX,my=e.clientY;
+  const [wp0,wp1]=dragWorldPoint;
+  const origLen=Math.sqrt(wp0*wp0+wp1*wp1);
+  if(origLen<0.1) return;
+  const tdx=(mx-W/2-offsetX)/scale,tdy=-(my-H/2-offsetY)/scale;
+  const tLen=Math.sqrt(tdx*tdx+tdy*tdy);
+  if(tLen<0.01) return;
+  const wu=[wp0/origLen,wp1/origLen],wperp=[-wu[1],wu[0]];
+  const tu=[tdx/tLen,tdy/tLen],tperp=[-tu[1],tu[0]];
+  const st=tLen/origLen;
+  const A=[[tu[0]*st,tperp[0]],[tu[1]*st,tperp[1]]];
+  const Bi=[[wu[0],wperp[0]],[wu[1],wperp[1]]];
+  const nm=[
+    [A[0][0]*Bi[0][0]+A[0][1]*Bi[1][0],A[0][0]*Bi[0][1]+A[0][1]*Bi[1][1]],
+    [A[1][0]*Bi[0][0]+A[1][1]*Bi[1][0],A[1][0]*Bi[0][1]+A[1][1]*Bi[1][1]]
+  ];
+  if(nm.some(r=>r.some(v=>Math.abs(v)>8))) return;
+  mat=nm; updateEigenUI(); draw();
+});
+window.addEventListener('mouseup',()=>{dragging=false;canvas.style.cursor='crosshair';});
+
+canvas.addEventListener('touchstart',e=>{
+  e.preventDefault();const t=e.touches[0];
+  dragging=true;dragWorldPoint=canvasToWorld(t.clientX,t.clientY);
+  matAtDragStart=mat.map(r=>[...r]);
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();const t=e.touches[0];
+  window.dispatchEvent(new MouseEvent('mousemove',{clientX:t.clientX,clientY:t.clientY}));
+},{passive:false});
+canvas.addEventListener('touchend',()=>{dragging=false;});
+
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  scale=Math.max(15,Math.min(300,scale*(e.deltaY>0?0.92:1.08)));
+  draw();
+},{passive:false});
+
+let panning=false,panStart=null,panOffsetStart=null;
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('mousedown',e=>{
+  if(e.button===2){panning=true;panStart={x:e.clientX,y:e.clientY};panOffsetStart={x:offsetX,y:offsetY};}
+});
+window.addEventListener('mousemove',e=>{
+  if(!panning) return;
+  offsetX=panOffsetStart.x+(e.clientX-panStart.x);
+  offsetY=panOffsetStart.y+(e.clientY-panStart.y);
+  draw();
+});
+window.addEventListener('mouseup',e=>{if(e.button===2) panning=false;});
+
+document.getElementById('eq-add-btn').addEventListener('click',()=>addEntry());
+document.getElementById('reset-btn').addEventListener('click',()=>{
+  mat=[[1,0],[0,1]];scale=60;offsetX=0;offsetY=0;
+  MAT_IDS.forEach((row,r)=>row.forEach((id,c)=>{document.getElementById(id).value=mat[r][c];}));
+  updateEigenUI();draw();
+});
+
+let hintHidden=false;
+canvas.addEventListener('mousedown',()=>{
+  if(!hintHidden){hintHidden=true;document.getElementById('hint-bar').style.opacity='0';}
+});
+
+wireMatrixInputs();
+addEntry();
+updateEigenUI();
+resize();
+</script>
+</body>
+</html>
