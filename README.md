@@ -55,4 +55,4 @@ git clone https://github.com/theaaryansinghh/eigen-geometry.git
 cd eigen-geometry
 ```
 
-Open `graph.html` in any browser. No dependencies, no build step.
+Open `index.html` in any browser. No dependencies, no build step.
